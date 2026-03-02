@@ -6,12 +6,13 @@ Implements two approaches:
 
 Author: AI Recommendation System Project
 """
+from __future__ import annotations  # makes all annotations strings → works on Python 3.9+
 
 import json
 import re
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -19,7 +20,8 @@ import numpy as np
 
 DATA_PATH = Path(__file__).parent / "data" / "restaurants.json"
 
-def load_restaurants() -> list[dict]:
+
+def load_restaurants() -> list:
     with open(DATA_PATH) as f:
         return json.load(f)
 
@@ -45,8 +47,8 @@ def build_rich_text(r: dict) -> str:
 # ─── Embedding Engine ─────────────────────────────────────────────────────────
 
 _model = None
-_embeddings: np.ndarray | None = None
-_restaurants: list[dict] | None = None
+_embeddings: Optional[np.ndarray] = None
+_restaurants: Optional[list] = None
 
 
 def get_model():
@@ -57,7 +59,7 @@ def get_model():
     return _model
 
 
-def get_embeddings(restaurants: list[dict]) -> np.ndarray:
+def get_embeddings(restaurants: list) -> np.ndarray:
     """Compute (and cache) embeddings for all restaurants."""
     global _embeddings, _restaurants
     if _embeddings is None or _restaurants is not restaurants:
@@ -81,12 +83,12 @@ def cosine_similarity_matrix(query_vec: np.ndarray, matrix: np.ndarray) -> np.nd
 # ─── 1. Content-Based Recommender ────────────────────────────────────────────
 
 def content_based_recommend(
-    restaurants: list[dict],
-    liked_ids: list[int] | None = None,
-    rated_items: dict[int, float] | None = None,
-    exclude_ids: set[int] | None = None,
+    restaurants: list,
+    liked_ids: Optional[list] = None,
+    rated_items: Optional[dict] = None,
+    exclude_ids: Optional[set] = None,
     top_k: int = 10,
-) -> list[dict]:
+) -> list:
     """
     Recommend restaurants based on user's liked/rated items.
 
@@ -134,7 +136,7 @@ def content_based_recommend(
     results = []
     for idx, score in ranked[:top_k]:
         r = dict(restaurants[idx])
-        r["_score"] = float(score)
+        r["_score"] = float(np.clip(score, 0.0, 1.0))
         r["_method"] = "content-based"
         r["_explanation"] = generate_content_explanation(r, restaurants, liked_ids, rated_items)
         results.append(r)
@@ -144,7 +146,7 @@ def content_based_recommend(
 # ─── 2. LLM-Powered Semantic Recommender ──────────────────────────────────────
 
 # Keyword maps for structured parsing of natural language queries
-CUISINE_KEYWORDS: dict[str, list[str]] = {
+CUISINE_KEYWORDS: dict = {
     "Italian":        ["italian", "pizza", "pasta", "risotto", "tiramisu", "rome", "naples", "trattoria"],
     "Chinese":        ["chinese", "dim sum", "peking duck", "dumplings", "wonton", "cantonese", "sichuan", "beijing"],
     "Japanese":       ["japanese", "sushi", "ramen", "tempura", "sashimi", "udon", "miso", "izakaya", "wagyu"],
@@ -154,27 +156,30 @@ CUISINE_KEYWORDS: dict[str, list[str]] = {
     "French":         ["french", "bistro", "croissant", "coq au vin", "bouillabaisse", "baguette", "paris", "brasserie"],
     "American":       ["american", "burger", "bbq", "barbecue", "fried chicken", "steak", "wings", "mac and cheese"],
     "Mediterranean":  ["mediterranean", "mezze", "hummus", "falafel", "grilled", "olive oil", "pita", "aegean"],
-    "Korean":         ["korean", "bbq", "bibimbap", "kimchi", "ramen", "bulgogi", "k-food", "galbi"],
+    "Korean":         ["korean", "bbq", "bibimbap", "kimchi", "bulgogi", "k-food", "galbi"],
     "Vietnamese":     ["vietnamese", "pho", "banh mi", "spring rolls", "bun bo", "saigon", "hanoi"],
     "Greek":          ["greek", "souvlaki", "gyro", "spanakopita", "moussaka", "taverna", "athens"],
     "Spanish":        ["spanish", "tapas", "paella", "sangria", "chorizo", "patatas bravas", "barcelona"],
     "Middle Eastern": ["middle eastern", "shawarma", "kebab", "falafel", "hummus", "levant", "arabic"],
     "Ethiopian":      ["ethiopian", "injera", "doro wat", "berbere", "east african", "addis"],
-    "Brazilian":      ["brazilian", "churrasco", "caipirinha", "feijoada", "bbq", "samba"],
+    "Brazilian":      ["brazilian", "churrasco", "caipirinha", "feijoada", "samba"],
     "Peruvian":       ["peruvian", "ceviche", "lomo saltado", "pisco sour", "andes", "lima"],
     "Lebanese":       ["lebanese", "kibbeh", "labneh", "tabbouleh", "beirut", "levant"],
     "Turkish":        ["turkish", "kebab", "baklava", "pide", "istanbul", "ottoman"],
     "Caribbean":      ["caribbean", "jerk", "jerk chicken", "plantains", "reggae", "island", "rum"],
 }
 
-PRICE_KEYWORDS: dict[str, list[str]] = {
+# Flat list of all supported cuisines (exported for use in app.py)
+CUISINES = list(CUISINE_KEYWORDS.keys())
+
+PRICE_KEYWORDS: dict = {
     "$":    ["cheap", "affordable", "budget", "inexpensive", "under $15", "under 15", "student", "value"],
     "$$":   ["moderate", "mid-range", "reasonable", "average price", "mid price", "under $30", "under 30"],
     "$$$":  ["upscale", "nice", "elevated", "premium", "date night", "anniversary", "classy", "fine"],
     "$$$$": ["luxury", "fine dining", "splurge", "expensive", "michelin", "tasting menu", "high-end"],
 }
 
-AMBIANCE_KEYWORDS: dict[str, list[str]] = {
+AMBIANCE_KEYWORDS: dict = {
     "Casual":           ["casual", "relaxed", "laid-back", "chill", "informal", "quick"],
     "Fine Dining":      ["fine dining", "formal", "elegant", "upscale", "white tablecloth"],
     "Family-Friendly":  ["family", "kids", "children", "family-friendly", "kid-friendly"],
@@ -185,7 +190,7 @@ AMBIANCE_KEYWORDS: dict[str, list[str]] = {
     "Quiet":            ["quiet", "peaceful", "serene", "calm", "tranquil", "work-friendly"],
 }
 
-DIETARY_KEYWORDS: dict[str, list[str]] = {
+DIETARY_KEYWORDS: dict = {
     "Vegetarian-friendly": ["vegetarian", "veggie", "no meat", "plant"],
     "Vegan options":       ["vegan", "plant-based", "dairy-free vegan"],
     "Gluten-free options": ["gluten-free", "gluten free", "celiac", "no gluten"],
@@ -194,24 +199,24 @@ DIETARY_KEYWORDS: dict[str, list[str]] = {
     "Dairy-free options":  ["dairy-free", "dairy free", "no dairy", "lactose"],
 }
 
-FEATURE_KEYWORDS: dict[str, list[str]] = {
-    "Outdoor seating": ["outdoor", "patio", "terrace", "outside", "al fresco"],
-    "Delivery":        ["delivery", "deliver"],
-    "Takeout":         ["takeout", "take-out", "take out", "to-go", "to go"],
-    "Bar":             ["bar", "drinks", "cocktails", "wine bar"],
-    "Live music":      ["live music", "music", "entertainment", "jazz", "band"],
-    "Private dining":  ["private", "private room", "special event"],
-    "Parking available": ["parking", "park"],
+FEATURE_KEYWORDS: dict = {
+    "Outdoor seating":       ["outdoor", "patio", "terrace", "outside", "al fresco"],
+    "Delivery":              ["delivery", "deliver"],
+    "Takeout":               ["takeout", "take-out", "take out", "to-go", "to go"],
+    "Bar":                   ["bar", "drinks", "cocktails", "wine bar"],
+    "Live music":            ["live music", "music", "entertainment", "jazz", "band"],
+    "Private dining":        ["private", "private room", "special event"],
+    "Parking available":     ["parking", "park"],
     "Reservations accepted": ["reservation", "reserve", "book a table"],
-    "Pet-friendly":    ["pet", "dog", "dog-friendly"],
-    "Happy hour":      ["happy hour", "happy hr", "specials"],
+    "Pet-friendly":          ["pet", "dog", "dog-friendly"],
+    "Happy hour":            ["happy hour", "happy hr", "specials"],
 }
 
 
-def parse_query(query: str) -> dict[str, Any]:
+def parse_query(query: str) -> dict:
     """Extract structured preferences from a natural language query."""
     q = query.lower()
-    prefs: dict[str, Any] = {
+    prefs: dict = {
         "cuisines": [],
         "price_ranges": [],
         "ambiances": [],
@@ -249,12 +254,12 @@ def parse_query(query: str) -> dict[str, Any]:
 
 
 def llm_semantic_recommend(
-    restaurants: list[dict],
+    restaurants: list,
     query: str,
-    selected_categories: list[str] | None = None,
-    exclude_ids: set[int] | None = None,
+    selected_categories: Optional[list] = None,
+    exclude_ids: Optional[set] = None,
     top_k: int = 10,
-) -> list[dict]:
+) -> list:
     """
     Recommend restaurants using semantic query embedding + structured filtering.
 
@@ -305,10 +310,15 @@ def llm_semantic_recommend(
 
     scored.sort(key=lambda x: -x[1])
 
+    # Normalise composite scores so the display stays ≤ 100%
+    max_score = scored[0][1] if scored else 1.0
+    if max_score <= 0:
+        max_score = 1.0
+
     results = []
     for idx, composite, base_sim in scored[:top_k]:
         r = dict(restaurants[idx])
-        r["_score"] = composite
+        r["_score"] = float(np.clip(composite / max_score, 0.0, 1.0))
         r["_base_sim"] = base_sim
         r["_method"] = "llm-semantic"
         r["_prefs"] = prefs
@@ -321,9 +331,9 @@ def llm_semantic_recommend(
 
 def generate_content_explanation(
     restaurant: dict,
-    all_restaurants: list[dict],
-    liked_ids: list[int] | None,
-    rated_items: dict[int, float] | None,
+    all_restaurants: list,
+    liked_ids: Optional[list],
+    rated_items: Optional[dict],
 ) -> str:
     """Generate a specific, feature-driven explanation for content-based recs."""
     parts = []
@@ -344,18 +354,15 @@ def generate_content_explanation(
                 ref_restaurant = id_to_r[rid]
 
     if ref_restaurant:
-        # Shared cuisine
         if restaurant["cuisine"] == ref_restaurant["cuisine"]:
             parts.append(f"Same **{restaurant['cuisine']}** cuisine as \"{ref_restaurant['name']}\" which you enjoyed")
         else:
             parts.append(f"Similar style to \"{ref_restaurant['name']}\"")
 
-        # Shared price range
         if restaurant["price_range"] == ref_restaurant["price_range"]:
             price_labels = {"$": "budget-friendly", "$$": "moderately priced", "$$$": "upscale", "$$$$": "fine-dining"}
             parts.append(f"matching {price_labels.get(restaurant['price_range'], restaurant['price_range'])} price point ({restaurant['price_range']})")
 
-        # Shared ambiance
         if restaurant["ambiance"] == ref_restaurant["ambiance"]:
             parts.append(f"{restaurant['ambiance'].lower()} atmosphere like restaurants you prefer")
 
@@ -372,78 +379,68 @@ def generate_content_explanation(
     if not parts:
         parts.append(f"{restaurant['cuisine']} restaurant with {restaurant['rating']}★ rating in {restaurant['location']}")
 
-    explanation = "Recommended because: " + "; ".join(parts[:4]) + "."
-    return explanation
+    return "Recommended because: " + "; ".join(parts[:4]) + "."
 
 
 def generate_llm_explanation(restaurant: dict, prefs: dict, score: float) -> str:
     """Generate a query-specific, attribute-driven explanation for semantic recs."""
     matched_attrs = []
 
-    # Cuisine match
     if prefs["cuisines"] and restaurant["cuisine"] in prefs["cuisines"]:
         matched_attrs.append(f"**{restaurant['cuisine']}** cuisine matches your request")
 
-    # Price match
     if prefs["price_ranges"] and restaurant["price_range"] in prefs["price_ranges"]:
         price_label = {"$": "budget-friendly", "$$": "moderately priced", "$$$": "upscale", "$$$$": "fine-dining"}
         matched_attrs.append(f"price range **{restaurant['price_range']}** ({price_label.get(restaurant['price_range'], '')})")
 
-    # Ambiance match
     if prefs["ambiances"] and restaurant["ambiance"] in prefs["ambiances"]:
         matched_attrs.append(f"**{restaurant['ambiance']}** ambiance as you specified")
 
-    # Dietary match
     diet_matches = [d for d in prefs.get("dietary", []) if d in restaurant.get("dietary_options", [])]
     if diet_matches:
         matched_attrs.append(f"offers {', '.join(diet_matches)}")
 
-    # Feature matches
     feat_matches = [f for f in prefs.get("features", []) if f in restaurant.get("features", [])]
     if feat_matches:
         matched_attrs.append(f"has {', '.join(feat_matches[:2])}")
 
-    # Semantic content match — mention top dish as evidence
     if restaurant["popular_dishes"]:
         matched_attrs.append(f"features **{restaurant['popular_dishes'][0]}** and other dishes relevant to your search")
 
-    # Rating
     if restaurant["rating"] >= 4.5:
         matched_attrs.append(f"highly rated at {restaurant['rating']}★")
     elif restaurant["rating"] >= 4.0:
         matched_attrs.append(f"rated {restaurant['rating']}★")
 
     if matched_attrs:
-        explanation = "Matches your query because: " + "; ".join(matched_attrs[:5]) + "."
-    else:
-        explanation = (
-            f"Semantically similar to your description — a {restaurant['ambiance'].lower()} "
-            f"{restaurant['cuisine']} restaurant rated {restaurant['rating']}★ "
-            f"in {restaurant['location']} at {restaurant['price_range']} pricing."
-        )
+        return "Matches your query because: " + "; ".join(matched_attrs[:5]) + "."
 
-    return explanation
+    return (
+        f"Semantically similar to your description — a {restaurant['ambiance'].lower()} "
+        f"{restaurant['cuisine']} restaurant rated {restaurant['rating']}★ "
+        f"in {restaurant['location']} at {restaurant['price_range']} pricing."
+    )
 
 
 # ─── Hybrid Blend ─────────────────────────────────────────────────────────────
 
 def hybrid_recommend(
-    restaurants: list[dict],
-    liked_ids: list[int] | None = None,
-    rated_items: dict[int, float] | None = None,
-    query: str | None = None,
-    selected_categories: list[str] | None = None,
-    exclude_ids: set[int] | None = None,
+    restaurants: list,
+    liked_ids: Optional[list] = None,
+    rated_items: Optional[dict] = None,
+    query: Optional[str] = None,
+    selected_categories: Optional[list] = None,
+    exclude_ids: Optional[set] = None,
     top_k: int = 10,
     cb_weight: float = 0.5,
-) -> list[dict]:
+) -> list:
     """
     Blend content-based and LLM-semantic scores when both inputs are available.
     """
-    id_to_idx = {r["id"]: i for i, r in enumerate(restaurants)}
-    cb_results, llm_results = {}, {}
+    cb_results: dict = {}
+    llm_results: dict = {}
 
-    if (liked_ids or rated_items):
+    if liked_ids or rated_items:
         for r in content_based_recommend(restaurants, liked_ids, rated_items, exclude_ids, top_k * 2):
             cb_results[r["id"]] = r
 
@@ -452,14 +449,18 @@ def hybrid_recommend(
             llm_results[r["id"]] = r
 
     if not cb_results and not llm_results:
-        # Fallback: return top-rated
-        sorted_r = sorted(restaurants, key=lambda x: -x["rating"])
-        return sorted_r[:top_k]
+        # Fallback: return top-rated with basic metadata
+        sorted_r = sorted(restaurants, key=lambda x: -x["rating"])[:top_k]
+        for r in sorted_r:
+            r["_score"] = r["rating"] / 5.0
+            r["_method"] = "content-based"
+            r["_explanation"] = f"Highly rated {r['cuisine']} restaurant ({r['rating']}★) in {r['location']}."
+        return sorted_r
 
     all_ids = set(cb_results) | set(llm_results)
     blended = []
     for rid in all_ids:
-        if rid in exclude_ids if exclude_ids else False:
+        if exclude_ids and rid in exclude_ids:
             continue
         cb_score = cb_results[rid]["_score"] if rid in cb_results else 0.0
         llm_score = llm_results[rid]["_score"] if rid in llm_results else 0.0
@@ -476,7 +477,7 @@ def hybrid_recommend(
 
         base = cb_results.get(rid) or llm_results.get(rid)
         r = dict(base)
-        r["_score"] = final_score
+        r["_score"] = float(np.clip(final_score, 0.0, 1.0))
         r["_method"] = method
         if method == "hybrid":
             r["_explanation"] = (

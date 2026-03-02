@@ -2,6 +2,7 @@
 🍽️ AI-Powered Restaurant Recommendation Engine
 Streamlit application — Content-Based + LLM-Semantic approaches
 """
+from __future__ import annotations  # makes all annotations strings → works on Python 3.9+
 
 import streamlit as st
 import numpy as np
@@ -23,7 +24,6 @@ from recommender import (
     llm_semantic_recommend,
     hybrid_recommend,
     get_embeddings,
-    CUISINES,
 )
 from evaluation import (
     precision_at_k,
@@ -509,6 +509,8 @@ with tab_metrics:
                 n_users=50,
                 k=k_eval,
                 seed=42,
+                embeddings=embeddings,
+                id_to_idx=id_to_idx,
             )
             llm_metrics = simulate_evaluation(
                 restaurants,
@@ -521,6 +523,8 @@ with tab_metrics:
                 n_users=50,
                 k=k_eval,
                 seed=42,
+                embeddings=embeddings,
+                id_to_idx=id_to_idx,
             )
         st.session_state.eval_results = (cb_metrics, llm_metrics, k_eval)
 
@@ -550,11 +554,11 @@ with tab_metrics:
 
         # Comparison chart
         st.markdown("### 📈 Metric Comparison")
-        common_keys = [k for k in cb_m if k in llm_m and k != "N Users Evaluated"]
+        common_keys = [mk for mk in cb_m if mk in llm_m and mk != "N Users Evaluated"]
         chart_df = pd.DataFrame({
             "Metric": common_keys,
-            "Content-Based": [cb_m[k] for k in common_keys],
-            "LLM-Semantic": [llm_m[k] for k in common_keys],
+            "Content-Based": [cb_m[mk] for mk in common_keys],
+            "LLM-Semantic": [llm_m[mk] for mk in common_keys],
         }).set_index("Metric")
         st.bar_chart(chart_df)
 
