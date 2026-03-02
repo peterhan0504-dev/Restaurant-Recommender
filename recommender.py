@@ -18,8 +18,7 @@ import numpy as np
 
 # ─── Data Loading ────────────────────────────────────────────────────────────
 
-DATA_PATH = Path(__file__).parent / "data" / "restaurants.json"
-
+DATA_PATH = Path(__file__).parent / "restaurants.json"
 
 def load_restaurants() -> list:
     with open(DATA_PATH) as f:
