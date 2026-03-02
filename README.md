@@ -2,7 +2,8 @@
 
 > An end-to-end intelligent recommendation system that combines **sentence-transformer embeddings** and **LLM-style semantic search** to surface personalised restaurant suggestions — each with a specific, human-readable explanation of *why* it was recommended.
 
-**[➡️ Live Demo on Streamlit Cloud](#)** *(add your URL after deployment)*
+**Demo Streamlit Link:https://restaurant-recommender-3uaqx9hcwvaixsyukqdkz5.streamlit.app
+**Youtube Presentation Link:https://youtu.be/yym43tl_qqc*
 
 ---
 
